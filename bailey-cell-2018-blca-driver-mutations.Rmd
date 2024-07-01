@@ -1,0 +1,122 @@
+---
+title: "Driver Mutations in Bladder Cancer From Bailey et al 2018 Cell Paper"
+output: html_document
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>"
+)
+```
+
+```{r read-excel}
+# Read the Excel file
+library(readxl)
+library(tidyverse)
+library(janitor)
+library(httpgd)
+library(languageserver)
+library(grid)
+library(ggplot2)
+library(shadowtext)
+library(plotly)
+hgd()
+
+setwd("C:/Users/jason/OneDrive - University of Cambridge/sem-lab-code/practice-code")
+
+
+raw_tib <- read_excel("../data-depo/bailey-299-driver-genes-only.xlsx", sheet = 2)
+
+# Convert correct row to column name
+raw_tib <- raw_tib %>% row_to_names(row_number = 3)
+
+print(raw_tib)
+```
+
+```{r filter-data}
+tib <- raw_tib[-c(1:2), ]
+
+# Filter only BLCA
+blca_df <- tib %>% filter(Cancer == "BLCA")
+
+# Arrange by the 'Tissue Frequency' column in descending order using BACKTICKS
+blca_sorted <- blca_df %>% arrange(`Tissue Frequency`)
+
+print(blca_sorted)
+```
+
+
+```{r plot_plotly}
+# Turn TF into numbers
+blca_sorted$`Tissue Frequency` <- as.numeric(blca_sorted$`Tissue Frequency`)
+blca_sorted$`Correlation adusted score` <- as.numeric(blca_sorted$`Correlation adusted score`)
+
+blca_sorted <- blca_sorted %>% arrange(`Tissue Frequency`)
+
+# Set the factor levels for Gene based on Tissue Frequency
+blca_sorted$Gene <- factor(blca_sorted$Gene, levels = blca_sorted$Gene)
+
+blca_sorted$`Tissue Frequency` <- round(blca_sorted$`Tissue Frequency`, 4)
+blca_sorted$`Correlation adusted score` <- round(blca_sorted$`Correlation adusted score`, 3)
+
+blca_sorted$hover_text <- paste(
+  "Gene:", blca_sorted$Gene,
+  "<br>Tissue Frequency:",
+  blca_sorted$`Tissue Frequency`,
+  "<br>Correlation Adjusted Consensus Score:",
+  blca_sorted$`Correlation adusted score`,
+  "<br>TSG or Oncogene:",
+  blca_sorted$`Tumor suppressor or oncogene prediction (by 20/20+)`
+) # nolint
+
+# Horizontal bar plot with color intensity based on correlation adjusted consensus score
+plt <- plot_ly(blca_sorted,
+  x = ~`Tissue Frequency`,
+  y = ~Gene,
+  type = "bar",
+  orientation = "h",
+  marker = list(
+    color = ~`Correlation adusted score`,
+    colorscale = "Viridis",
+    showscale = TRUE,
+    colorbar = list(title = list(text = "Correlation Adjusted Consensus Score", side = "right"))
+  ),
+  text = ~hover_text,
+  hoverinfo = "text"
+) %>%
+  layout(
+    xaxis = list(title = "Tissue Frequency"),
+    yaxis = list(
+      title = "Gene",
+      tickmode = "array",
+      tickvals = ~Gene,
+      ticktext = ~Gene,
+      tickfont = list(size = 8)
+    ),
+    bargap = 0.3
+  )
+
+plt
+```
+
+
+```{r plot_gg}
+# Create the ggplot
+plt_gg <- ggplot(blca_sorted) +
+  geom_col(aes(x = Gene, y = `Tissue Frequency`), fill = "blue", width = 0.6) +
+  geom_text(aes(x = Gene, y = `Tissue Frequency`, label = sprintf("%0.2f", round(`Tissue Frequency`, digits = 2))),
+    hjust = -0.1, size = 2
+  ) +
+  coord_flip() +
+  theme_minimal() +
+  labs(title = "Tissue Frequencies of Driver Genes in Bladder Cancer") +
+  theme(
+    axis.text.y = element_text(size = 5, margin = margin(r = -20)),
+    axis.text.x = element_text(size = 5)
+  )
+
+dev.new()
+plot(plt_gg)
+```
+
